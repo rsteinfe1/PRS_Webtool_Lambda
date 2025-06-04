@@ -1,7 +1,9 @@
 import subprocess
 import os
 import logging
+import sys
 import numpy as np
+import shutil
 
 logger = logging.getLogger("app_logger")
 
@@ -60,7 +62,7 @@ def extract_chromosome(vcf_file_path):
                 raise ChromosomeCountError()
 
     if len(chromosomes) == 0:
-        logger.error(f"No chromosome found in the VCF file.")
+        logger.error(f"[ERROR] No chromosome found in the VCF file.")
         raise ChromosomeCountError()
 
     return chromosomes.pop()
@@ -69,7 +71,7 @@ def index_vcf(vcf_path):
 
     #File check
     if not os.path.isfile(vcf_path):
-        logger.error(f"The file {vcf_path} does not exist.")
+        logger.error(f"[ERROR] The file {vcf_path} does not exist.")
         raise FileNotFoundError()
 
     is_bgzipped = vcf_path.endswith('.gz')
@@ -86,9 +88,71 @@ def index_vcf(vcf_path):
             tabix_command = ['tabix', '-fp', 'vcf', bgzipped_file]
             subprocess.run(tabix_command, check=True)
     except subprocess.CalledProcessError as e:
-        logger.error(f"An error occurred while running the command: {e.cmd}")
+        logger.error(f"[ERROR] Failed running: {e.cmd}")
         logger.error(f"{e.stderr}")
         raise
     except Exception as e:
-        logger.error(f"An unexpected error occurred: {str(e)}")
+        logger.error(f"[ERROR] An unexpected error occurred: {str(e)}")
         raise
+
+def run_cmd(cmd, shell=False):
+    print(f"Running: {cmd if isinstance(cmd, str) else ' '.join(cmd)}")
+    result = subprocess.run(cmd, shell=shell, capture_output=True, text=True)
+    if result.returncode != 0:
+        logger.error(f"[ERROR] Failed running: {result.stderr}")
+        sys.exit(1)
+
+def inject_contigs(vcf_file, fai_file):
+    """
+    Injects contig headers from a .fai file into a VCF file.
+    This is necessary to ensure that the VCF file can be sorted and indexed correctly.
+    print(f"Running: {cmd if isinstance(cmd, str) else ' '.join(cmd)}")
+    """
+    contig_lines = []
+    with open(fai_file) as fai:
+        for line in fai:
+            chrom, length = line.strip().split("\t")[:2]
+            contig_lines.append(f"##contig=<ID={chrom},length={length}>\n")
+
+    header = []
+    body = []
+    with open(vcf_file) as vcf:
+        for line in vcf:
+            if line.startswith("##"):
+                header.append(line)
+            elif line.startswith("#CHROM"):
+                header.extend(contig_lines)
+                header.append(line)
+                break
+            else:
+                header.append(line)
+        body = vcf.readlines()
+
+    with open(vcf_file, "w") as out:
+        out.writelines(header)
+        out.writelines(body)
+
+
+def liftOver(chain, input_vcf, ref_fasta):
+    # File prefix for safe naming. 
+    prefix = os.path.splitext(os.path.basename(input_vcf))[0].replace('.vcf', '')
+
+    # Temporary working files in /tmp
+    lifted_raw = f"/tmp/{prefix}.lifted.unsorted.vcf"
+    sorted_tmp = f"/tmp/{prefix}.sorted.tmp.vcf"
+    
+    # Step 1: CrossMap
+    run_cmd(["CrossMap", "vcf", chain, input_vcf, ref_fasta, lifted_raw])
+
+    # Step 2: Inject correct contig headers from .fai
+    inject_contigs(lifted_raw, ref_fasta + ".fai")
+
+    # Step 3: Sort with bcftools
+    run_cmd(f"bcftools sort {lifted_raw} -o {sorted_tmp}", shell=True)
+
+    # Step 4: Rename to final path in /tmp/ before compression
+    shutil.move(sorted_tmp, input_vcf)
+
+
+
+

@@ -91,10 +91,15 @@ def write_vcf(outfile, records):
 
 ## We take the loaded snplist from RAM (Ancestry)
 def load_ancestry_data(lines):
-    for line in lines:
+    for row_num, line in enumerate(lines, start=1):
         if line.startswith('#'): continue
         if line.strip():
-            rsid, chrom, pos, allele1, allele2 = line.strip().split('\t')
+            fields = [f.strip() for f in line.strip().split('\t') if f.strip() != '']
+            if len(fields) == 5:
+                rsid, chrom, pos, allele1, allele2 = fields
+            else:
+                logger.warning(f"Skipping malformed line {row_num}: {line.strip()} (parsed fields: {fields})")
+                continue
             genotype = allele1 + allele2
             if chrom == 'MT':
                 chrom = 'M'
@@ -108,10 +113,15 @@ def load_ancestry_data(lines):
 
 ## We take the loaded snplist from RAM (23andMe)
 def load_23andme_data(lines):
-        for line in lines:
+        for row_num, line in enumerate(lines, start=1):
             if line.startswith('#'): continue
             if line.strip():
-                rsid, chrom, pos, genotype = line.strip().split('\t')
+                fields = [f.strip() for f in line.strip().split('\t') if f.strip() != '']
+                if len(fields) == 4:
+                    rsid, chrom, pos, genotype = fields
+                else:
+                    logger.warning(f"Skipping malformed line {row_num}: {line.strip()} (parsed fields: {fields})")
+                    continue
                 if chrom == 'MT':
                     chrom = 'M'
                 if genotype != '--':

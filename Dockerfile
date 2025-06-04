@@ -8,6 +8,7 @@ FROM  public.ecr.aws/lambda/python:3.9
 
 RUN yum -y update && \
     yum -y groupinstall "Development Tools" && \
+    yum -y install epel-release && \
     yum -y install \
     epel-release \
     chkconfig \
@@ -31,7 +32,10 @@ RUN yum -y update && \
     gzip \
     bzip2 \
     bzip2-devel \
+    bcftools \
+    tabix \
     tar \
+    which \
     xz \
     xz-devel \
     zlib-devel \
@@ -39,18 +43,18 @@ RUN yum -y update && \
     yum clean all
 
 #Tabix & Bgzip
-ENV HTSLIB_VERSION=1.12
-ADD https://github.com/samtools/htslib/releases/download/${HTSLIB_VERSION}/htslib-${HTSLIB_VERSION}.tar.bz2 /tmp/
-RUN tar -xvjf /tmp/htslib-${HTSLIB_VERSION}.tar.bz2 -C /tmp && \
-    cd /tmp/htslib-${HTSLIB_VERSION} && \
-    make && \
-    make install && \
-    cd .. && \
-    rm -rf /tmp/htslib-${HTSLIB_VERSION} /tmp/htslib-${HTSLIB_VERSION}.tar.bz2
+# ENV HTSLIB_VERSION=1.12
+# ADD https://github.com/samtools/htslib/releases/download/${HTSLIB_VERSION}/htslib-${HTSLIB_VERSION}.tar.bz2 /tmp/
+# RUN tar -xvjf /tmp/htslib-${HTSLIB_VERSION}.tar.bz2 -C /tmp && \
+#     cd /tmp/htslib-${HTSLIB_VERSION} && \
+#     make && \
+#     make install && \
+#     cd .. && \
+#     rm -rf /tmp/htslib-${HTSLIB_VERSION} /tmp/htslib-${HTSLIB_VERSION}.tar.bz2
 
 
 RUN ln -sf /usr/bin/cmake3 /usr/bin/cmake
-RUN pip install --upgrade cget pandas certifi pysam pybase64 jsons boto3 regex pip-system-certs statsmodels scipy
+RUN pip install --upgrade cget pandas certifi pysam pybase64 jsons boto3 regex pip-system-certs statsmodels scipy CrossMap
 #RUN pip3 install --upgrade pip
 #RUN pip3 install --upgrade certifi
 #RUN python3 --version && python3 -m certifi

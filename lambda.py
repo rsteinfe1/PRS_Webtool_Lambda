@@ -1,4 +1,4 @@
-import base64
+
 import re
 import gzip
 import file_io
@@ -6,8 +6,8 @@ import impute
 import prs
 import sys
 import os
-import shutil
 import logging
+import json
 from datetime import datetime, timezone
 
 logger = logging.getLogger("app_logger")
@@ -21,27 +21,12 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-#Extract the body from an event and strip JSON/File meta data
+#Extract the genotyping from an event and strip JSON/File meta data
 def extract(event):
-    if 'body' in event:
-        body = event['body']
-
-        #Check if base64 encoded and try to decompress. If not it fails and we just decode
-        if event['isBase64Encoded']:
-                body = base64.b64decode(body)
-        try:
-            body = gzip.decompress(body).decode('utf-8')
-            #return "decompress check"
-        except gzip.BadGzipFile:
-            pass
-            body = body.decode('utf-8')
-
-        body_lines = re.split(r'[\r\n]+', body)
-        body_lines_filter = [element for element in body_lines if element.startswith('rs') or element.startswith('i')]
-    else:
-        body_lines_filter = []
-
-
+    body = json.loads(event['body'])
+    table_data = body.get('tableData', "")
+    body_lines = re.split(r'[\r\n]+', table_data)
+    body_lines_filter = [element for element in body_lines if element.startswith('rs') or element.startswith('i')]
     return body_lines_filter
 
 #Convert each line in a list from csv to tsv. 
@@ -101,6 +86,9 @@ def clean_up(dir):
 
 def handler(event, context):
     #clean_up('/tmp/')
+    fai36path = "/mnt/ref/ref/human_genome_v36.fa.fai"
+    fa36path = "/mnt/ref/ref/human_genome_v36.fa"
+    chain = "/mnt/ref/ref/hg18ToHg19.over.chain.gz"
     faipath = "/mnt/ref/ref/human_g1k_v37.fasta.fai"
     fapath = "/mnt/ref/ref/human_g1k_v37.fasta"
     vcfRef = "/mnt/ref/ref/1kgreference.bcf"
@@ -108,34 +96,43 @@ def handler(event, context):
     haplo_ref_suffix = '1000g.Phase3.v5.With.Parameter.Estimates.msav'
     #Step 1: extract the uploaded file from the event
     body = extract(event)
+    build = json.loads(event['body']).get('build', 'NA')  # Default to NA if not specified
+    logger.debug(f"[DEBUG]: Received build: {build}")
     #Step2: Convert csv to tsv or keep tsv
     body = convert_to_tsv(body)
     #Step3: Convert to VCF
 
-##TODO: [ERROR] IndexError: list index out of range
-#Traceback (most recent call last):
-#  File "/var/task/lambda.py", line 111, in handler
-#    filetype = guess_file_format(body)
-#  File "/var/task/lambda.py", line 61, in guess_file_format
-#    line = body[0]
-
     filetype = guess_file_format(body)
-    logger.debug(f"[DEBUG]: Version 0.2a")
+    logger.debug(f"[DEBUG]: Version 0.3a")
     logger.debug(f"[DEBUG]: Guessed file format: {filetype}")
     row_count = len(body)
     logger.debug(f"[DEBUG]: Called Handler. Received object: {row_count} rows")
-    if(filetype == '23andme'):
+    if filetype == '23andme':
         snps = file_io.load_23andme_data(body)
-    elif(filetype == 'ancestry'):
+    elif filetype == 'ancestry':
         snps = file_io.load_ancestry_data(body)
     else:
-         logger.error(f"[ERROR] Failed to load genotypes. Exit.")
-         sys.exit(1)
+        logger.error(f"[ERROR] Failed to load genotypes. Exit.")
+        sys.exit(1)
 
-    fai = file_io.load_fai(faipath)
-    records = file_io.get_vcf_records(snps, fai, fapath)
-    infile = '/tmp/input.vcf'
-    file_io.write_vcf(infile, records)
+    infile = '/tmp/input.vcf.gz'
+    if build == 'GRCh36':
+        fai = file_io.load_fai(fai36path)
+        records = file_io.get_vcf_records(snps, fai, fa36path)
+        file_io.write_vcf(infile, records)
+        impute.liftOver(chain, infile, fapath)
+    elif build == 'GRCh37':
+        fai = file_io.load_fai(faipath)
+        records = file_io.get_vcf_records(snps, fai, fapath)
+        file_io.write_vcf(infile, records)
+    else:
+        #We can build a guessing function here. 
+        logger.error(f"[ERROR] Unknown build: {build}. Exiting.")
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': 'Unknown build'})
+        }
+
     row_count_vcf = file_io.count_vcf(infile)
     logger.debug(f"[DEBUG]: File conversion complete. VCF has {row_count_vcf} rows")
     chr = str(impute.extract_chromosome(infile))
