@@ -148,7 +148,7 @@ def liftOver(chain, input_vcf, ref_fasta):
     inject_contigs(lifted_raw, ref_fasta + ".fai")
 
     # Step 3: Sort with bcftools
-    run_cmd(f"bcftools sort {lifted_raw} -o {sorted_tmp}", shell=True)
+    run_cmd(f"bcftools sort {lifted_raw} -Ov -o {sorted_tmp}", shell=True)
 
     # Step 4: Rename to final path in /tmp/ before compression
     shutil.move(sorted_tmp, input_vcf)

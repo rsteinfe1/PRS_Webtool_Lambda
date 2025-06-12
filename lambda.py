@@ -1,4 +1,5 @@
 
+import base64
 import re
 import gzip
 import file_io
@@ -23,11 +24,26 @@ if not logger.handlers:
 
 #Extract the genotyping from an event and strip JSON/File meta data
 def extract(event):
-    body = json.loads(event['body'])
-    table_data = body.get('tableData', "")
-    body_lines = re.split(r'[\r\n]+', table_data)
-    body_lines_filter = [element for element in body_lines if element.startswith('rs') or element.startswith('i')]
-    return body_lines_filter
+    body_raw = event['body']
+    if event.get('isBase64Encoded', False):
+        body_raw = base64.b64decode(body_raw)
+
+    body = json.loads(body_raw)
+    return body
+
+def getGTs(body:dict) -> list:
+    """
+    Extracts the 'genotypes' field from the body of the event.
+    If 'genotypes' is not present, it returns an empty list.
+    """
+    if 'genotypes' in body:
+        genotypes = body.get('genotypes', '')
+        gt_lines = re.split(r'[\r\n]+', genotypes)
+        gtlines_filter = [line for line in gt_lines if line.startswith('rs') or line.startswith('i')]
+        return gtlines_filter
+    else:
+        logger.error(f"[:Error:] 'genotypes' field not found in the body.")
+        return []
 
 #Convert each line in a list from csv to tsv. 
 #Only use this function on lines already pre-processed with extract()
@@ -85,7 +101,24 @@ def clean_up(dir):
 
 
 def handler(event, context):
-    #clean_up('/tmp/')
+    clean_up('/tmp/')
+    #logger.debug(f"[DEBUG]: Received event: {json.dumps(event)}")
+
+    method = event.get("httpMethod")  # REST API
+    if not method and "requestContext" in event:
+        method = event["requestContext"].get("http", {}).get("method")  # HTTP API
+
+    if method == "OPTIONS":
+        return {
+            "statusCode": 200,
+            "headers": {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST,OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            },
+            "body": ""
+        }
+
     fai36path = "/mnt/ref/ref/human_genome_v36.fa.fai"
     fa36path = "/mnt/ref/ref/human_genome_v36.fa"
     chain = "/mnt/ref/ref/hg18ToHg19.over.chain.gz"
@@ -94,28 +127,32 @@ def handler(event, context):
     vcfRef = "/mnt/ref/ref/1kgreference.bcf"
     mapFile = "/mnt/ref/ref/genetic_map_hg19_withX.txt.gz"
     haplo_ref_suffix = '1000g.Phase3.v5.With.Parameter.Estimates.msav'
-    #Step 1: extract the uploaded file from the event
+    logger.debug(f"[DEBUG]: Version 0.3d")
+    #logger.debug(f"[DEBUG]: Received event: {json.dumps(event)}")
+    #Step 1: extract the uploaded payload from the event
     body = extract(event)
-    build = json.loads(event['body']).get('build', 'NA')  # Default to NA if not specified
+    build = body.get('build', 'NA')  # Default to NA if not specified
     logger.debug(f"[DEBUG]: Received build: {build}")
+    body = getGTs(body)
+    logger.debug(f"[DEBUG]: Extracted genotypes: {len(body)} lines. Class {type(body)}. First lines: {body[:5]}")
     #Step2: Convert csv to tsv or keep tsv
     body = convert_to_tsv(body)
     #Step3: Convert to VCF
 
     filetype = guess_file_format(body)
-    logger.debug(f"[DEBUG]: Version 0.3a")
     logger.debug(f"[DEBUG]: Guessed file format: {filetype}")
     row_count = len(body)
-    logger.debug(f"[DEBUG]: Called Handler. Received object: {row_count} rows")
+    logger.debug(f"[DEBUG]: Called file handler. Received object: {row_count} rows")
     if filetype == '23andme':
         snps = file_io.load_23andme_data(body)
     elif filetype == 'ancestry':
         snps = file_io.load_ancestry_data(body)
     else:
+        #Todo: Write a build guesser function here.
         logger.error(f"[ERROR] Failed to load genotypes. Exit.")
         sys.exit(1)
 
-    infile = '/tmp/input.vcf.gz'
+    infile = '/tmp/input.vcf'
     if build == 'GRCh36':
         fai = file_io.load_fai(fai36path)
         records = file_io.get_vcf_records(snps, fai, fa36path)
@@ -126,11 +163,11 @@ def handler(event, context):
         records = file_io.get_vcf_records(snps, fai, fapath)
         file_io.write_vcf(infile, records)
     else:
-        #We can build a guessing function here. 
+        #We can build a guessing function here.
         logger.error(f"[ERROR] Unknown build: {build}. Exiting.")
         return {
             'statusCode': 400,
-            'body': json.dumps({'error': 'Unknown build'})
+            'body': json.dumps({'Error': 'Unknown build'})
         }
 
     row_count_vcf = file_io.count_vcf(infile)

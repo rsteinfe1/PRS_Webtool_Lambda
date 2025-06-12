@@ -8,7 +8,7 @@ FROM  public.ecr.aws/lambda/python:3.9
 
 RUN yum -y update && \
     yum -y groupinstall "Development Tools" && \
-    yum -y install epel-release && \
+#    yum -y install epel-release && \
     yum -y install \
     epel-release \
     chkconfig \
@@ -22,6 +22,7 @@ RUN yum -y update && \
     gcc \
     gcc-c++ \
     curl \
+    curl-devel \
     libcurl \
     libcurl-devel \
     wget \
@@ -33,6 +34,7 @@ RUN yum -y update && \
     bzip2 \
     bzip2-devel \
     bcftools \
+    htslib \
     tabix \
     tar \
     which \
@@ -42,6 +44,10 @@ RUN yum -y update && \
     zlib && \
     yum clean all
 
+#Installs bgzip
+RUN curl -L -O https://github.com/samtools/htslib/releases/download/1.19.1/htslib-1.19.1.tar.bz2 \
+ && tar -xvjf htslib-1.19.1.tar.bz2 \
+ && cd htslib-1.19.1 && ./configure && make && make install
 #Tabix & Bgzip
 # ENV HTSLIB_VERSION=1.12
 # ADD https://github.com/samtools/htslib/releases/download/${HTSLIB_VERSION}/htslib-${HTSLIB_VERSION}.tar.bz2 /tmp/
