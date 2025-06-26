@@ -118,7 +118,7 @@ def handler(event, context):
             },
             "body": ""
         }
-
+    
     fai36path = "/mnt/ref/ref/human_genome_v36.fa.fai"
     fa36path = "/mnt/ref/ref/human_genome_v36.fa"
     chain = "/mnt/ref/ref/hg18ToHg19.over.chain.gz"
@@ -127,7 +127,7 @@ def handler(event, context):
     vcfRef = "/mnt/ref/ref/1kgreference.bcf"
     mapFile = "/mnt/ref/ref/genetic_map_hg19_withX.txt.gz"
     haplo_ref_suffix = '1000g.Phase3.v5.With.Parameter.Estimates.msav'
-    logger.debug(f"[DEBUG]: Version 0.3d")
+    logger.debug(f"[DEBUG]: Version 0.3f")
     #logger.debug(f"[DEBUG]: Received event: {json.dumps(event)}")
     #Step 1: extract the uploaded payload from the event
     body = extract(event)

@@ -85,5 +85,14 @@ RUN cd /usr/local/ && \
     #Add minimac4 and eagle to path
 ENV PATH="${PATH}:/usr/local/minimac4/bin:/usr/local/Eagle_v2.4.1:/usr/local/bin"
 
+#Build Bcftools from source
+RUN cd /usr/local && \
+    wget https://github.com/samtools/bcftools/releases/download/1.22/bcftools-1.22.tar.bz2 && \
+    tar -xvjf bcftools-1.22.tar.bz2 && \
+    cd bcftools-1.22/ && \
+    make && \
+    make install && \
+    chmod +x /usr/local/bcftools-1.22/bcftools
+
 # Call the AWS Lambda handler function
 CMD ["lambda.handler"]
