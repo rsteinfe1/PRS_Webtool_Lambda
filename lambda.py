@@ -164,6 +164,7 @@ def handler(event, context):
         file_io.write_vcf(infile, records)
     else:
         #We can build a guessing function here.
+        build = 
         logger.error(f"[ERROR] Unknown build: {build}. Exiting.")
         return {
             'statusCode': 400,
