@@ -130,7 +130,7 @@ def load_23andme_data(lines):
                         if x not in 'ACTG':
                             skip = True
                     if not skip:
-                        yield rsid, chrom, int(pos) - 1, genotype # subtract one because positions are 1-based indices
+                        yield rsid, chrom, pos, genotype # positions are 1-based indices
 
 def check_efs_file(file_path):
 
@@ -207,7 +207,7 @@ def count_vcf(file_path: str):
 
     return variant_count
 
-def upload_file_to_s3(bucket_name: str, s3_key: str, local_file_path: str) -> bool:
+def upload_file_to_s3(bucket_name: str, s3_key: str, local_file_path: str):
      
     s3 = boto3.client('s3')
      # Upload the file

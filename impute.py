@@ -106,7 +106,6 @@ def inject_contigs(vcf_file, fai_file):
     """
     Injects contig headers from a .fai file into a VCF file.
     This is necessary to ensure that the VCF file can be sorted and indexed correctly.
-    print(f"Running: {cmd if isinstance(cmd, str) else ' '.join(cmd)}")
     """
     contig_lines = []
     with open(fai_file) as fai:
