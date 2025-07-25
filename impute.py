@@ -153,5 +153,53 @@ def liftOver(chain, input_vcf, ref_fasta):
     shutil.move(sorted_tmp, input_vcf)
 
 
+import os
+
+def match_locusids_from_body(body, locusid_file):
+    """
+    body: list of strings like 'rsID,CHR,POS,GENOTYPE'
+    locusid_file: path to file with lines like 'rsID:CHR:POS'
+    Returns: float ratio of matched locusids to total parsed entries
+    """
+
+    # Step 1: Validate and parse body
+    locus_keys = set()
+    for line in body:
+        if line.startswith("#") or not line.strip():
+            continue
+        fields = line.strip().split(",")
+        if len(fields) < 3:
+            continue  # skip malformed lines
+        rsid, chrom, pos = fields[0], fields[1], fields[2]
+        if not rsid or not chrom or not pos:
+            continue
+        locus_keys.add(f"{rsid}:{chrom}:{pos}")
+
+    total = len(locus_keys)
+    if total == 0:
+        logger.warning("[WARNING] Could not parse body or body is empty.")
+        return 0.0
+
+    # Step 2: Check if file exists and is readable
+    if not os.path.exists(locusid_file):
+        logger.error(f"[ERROR]: LocusID file '{locusid_file}' not found.")
+        return 0.0
+    if not os.path.isfile(locusid_file):
+        logger.error(f"[ERROR]: '{locusid_file}' is not a regular file.")
+        return 0.0
+
+    try:
+        with open(locusid_file, "r") as f:
+            valid_locusids = {line.strip() for line in f if line.strip()}
+    except Exception as e:
+        logger.error(f"[ERROR] reading '{locusid_file}': {e}")
+        return 0.0
+
+    # Step 3: Compute match ratio
+    matches = locus_keys & valid_locusids
+    ratio = len(matches) / total if total > 0 else 0.0
+
+    return ratio
+
 
 

@@ -109,7 +109,7 @@ def load_ancestry_data(lines):
                     if x not in 'ACTG':
                         skip = True
                 if not skip:
-                    yield rsid, chrom, pos, genotype # subtract one because positions are 1-based indices
+                    yield rsid, chrom, pos, genotype # positions are 1-based indices
 
 ## We take the loaded snplist from RAM (23andMe)
 def load_23andme_data(lines):

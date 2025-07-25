@@ -121,13 +121,14 @@ def handler(event, context):
     
     fai36path = "/mnt/ref/ref/human_genome_v36.fa.fai"
     fa36path = "/mnt/ref/ref/human_genome_v36.fa"
-    chain = "/mnt/ref/ref/hg18ToHg19.over.chain.gz"
+    chain1 = "/mnt/ref/ref/hg18ToHg19.over.chain.gz"
+    chain2 = "/mnt/ref/ref/hg19ToHg38.over.chain.gz"
     faipath = "/mnt/ref/ref/human_g1k_v37.fasta.fai"
     fapath = "/mnt/ref/ref/human_g1k_v37.fasta"
     vcfRef = "/mnt/ref/ref/1kgreference.bcf"
     mapFile = "/mnt/ref/ref/genetic_map_hg19_withX.txt.gz"
     haplo_ref_suffix = '1000g.Phase3.v5.With.Parameter.Estimates.msav'
-    logger.debug(f"[DEBUG]: Version 0.3f")
+    logger.debug(f"[DEBUG]: Version 0.4a")
     #logger.debug(f"[DEBUG]: Received event: {json.dumps(event)}")
     #Step 1: extract the uploaded payload from the event
     body = extract(event)
@@ -150,26 +151,57 @@ def handler(event, context):
     else:
         #Todo: Write a build guesser function here.
         logger.error(f"[ERROR] Failed to load genotypes. Exit.")
-        sys.exit(1)
+        return {
+                    'statusCode': 400,
+                    'body': json.dumps({'Error': 'Unknown file format.'})
+                }
 
     infile = '/tmp/input.vcf'
     if build == 'GRCh36':
         fai = file_io.load_fai(fai36path)
         records = file_io.get_vcf_records(snps, fai, fa36path)
         file_io.write_vcf(infile, records)
-        impute.liftOver(chain, infile, fapath)
+        impute.liftOver(chain1, infile, fapath)
     elif build == 'GRCh37':
         fai = file_io.load_fai(faipath)
         records = file_io.get_vcf_records(snps, fai, fapath)
         file_io.write_vcf(infile, records)
     else:
-        #We can build a guessing function here.
-        build = 
-        logger.error(f"[ERROR] Unknown build: {build}. Exiting.")
-        return {
-            'statusCode': 400,
-            'body': json.dumps({'Error': 'Unknown build'})
-        }
+        #We determine build by matching rsID to Locus, lift over (if necessary) and write.
+        locusid = f"/mnt/ref/ref/dbSNP_151_idlocus_hg19_chr{chr}.txt"
+        matchbuild37 = impute.match_locusids_from_body(body, locusid)
+        if matchbuild37 > 0.9:
+            build = 'GRCh37'
+            logger.debug(f"[DEBUG]: Detected build GRCh37 with {matchbuild37} match ratio.")
+            fai = file_io.load_fai(faipath)
+            records = file_io.get_vcf_records(snps, fai, fapath)
+            file_io.write_vcf(infile, records)
+        else:
+            locusid = f"/mnt/ref/ref/dbSNP_151_idlocus_hg18_chr{chr}.txt"
+            matchbuild36 = impute.match_locusids_from_body(body, locusid)
+            if matchbuild36 > 0.9:
+                logger.debug(f"[DEBUG]: Detected build GRCh37 with {matchbuild36} match ratio.")
+                fai = file_io.load_fai(faipath)
+                records = file_io.get_vcf_records(snps, fai, fapath)
+                file_io.write_vcf(infile, records)
+                impute.liftOver(chain1, infile, fapath)
+            else:
+                locusid = f"/mnt/ref/ref/dbSNP_151_idlocus_hg38_chr{chr}.txt"
+                matchbuild38 = impute.match_locusids_from_body(body, locusid)
+                if matchbuild38 > 0.9:
+                    logger.debug(f"[DEBUG]: Detected build GRCh38 with {matchbuild38} match ratio.")
+                    fai = file_io.load_fai(faipath)
+                    records = file_io.get_vcf_records(snps, fai, fapath)
+                    file_io.write_vcf(infile, records)
+                    impute.liftOver(chain2, infile, fapath)
+                else:
+                    #Unknown build
+                    logger.error(f"[ERROR] Failed to detect build from genotypes. Match ratios: GRCh36: {matchbuild36}, GRCh37: {matchbuild37}, GRCh38: {matchbuild38} ")
+                    logger.error(f"[ERROR] Unknown build: {build}. Exiting.")
+                    return {
+                        'statusCode': 400,
+                        'body': json.dumps({'Error': 'Unknown build'})
+                    }
 
     row_count_vcf = file_io.count_vcf(infile)
     logger.debug(f"[DEBUG]: File conversion complete. VCF has {row_count_vcf} rows")
