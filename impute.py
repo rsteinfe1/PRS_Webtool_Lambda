@@ -44,10 +44,14 @@ def impute(vcfInput, haplo_ref_suffix, chr):
          logger.error(f"An exception occurred: {str(e)}")
 
 class ChromosomeCountError(Exception):
-    """Exception for incorrect number of chromosomes in VCF file."""
+    """Exception for incorrect number of chromosomes in file."""
     pass
 
-def extract_chromosome(vcf_file_path):
+class ChromosomeValueError(Exception):
+    """Exception for wrong value of chromosomes in file."""
+    pass
+
+def extract_chromosome_from_vcf(vcf_file_path):
     chromosomes = set()
     with open(vcf_file_path, 'r') as file:
         for line in file:
@@ -66,6 +70,29 @@ def extract_chromosome(vcf_file_path):
         raise ChromosomeCountError()
 
     return chromosomes.pop()
+
+def extract_chromosome_from_body(body):  
+    chromosomes = set()
+    for line in body:
+        if line.startswith("#") or not line.strip():
+            continue
+        fields = line.strip().split("\t")
+        if len(fields) >= 2:
+            chrom = fields[1].strip()
+            if chrom:
+                chromosomes.add(chrom)
+
+    if len(chromosomes) != 1:
+        logger.error(f"Expected exactly one chromosome, found {len(chromosomes)}: {chromosomes}")
+        raise ChromosomeCountError()
+
+    chrom = chromosomes.pop()
+    if not chrom.isdigit() or not (1 <= int(chrom) <= 22):
+        logger.error(f"Chromosome '{chrom}' is not a valid chromosome (1-22).")
+        raise ChromosomeValueError()
+    
+    return chrom
+
 
 def index_vcf(vcf_path):
 
@@ -103,10 +130,6 @@ def run_cmd(cmd, shell=False):
         sys.exit(1)
 
 def inject_contigs(vcf_file, fai_file):
-    """
-    Injects contig headers from a .fai file into a VCF file.
-    This is necessary to ensure that the VCF file can be sorted and indexed correctly.
-    """
     contig_lines = []
     with open(fai_file) as fai:
         for line in fai:
@@ -156,18 +179,13 @@ def liftOver(chain, input_vcf, ref_fasta):
 import os
 
 def match_locusids_from_body(body, locusid_file):
-    """
-    body: list of strings like 'rsID,CHR,POS,GENOTYPE'
-    locusid_file: path to file with lines like 'rsID:CHR:POS'
-    Returns: float ratio of matched locusids to total parsed entries
-    """
 
     # Step 1: Validate and parse body
     locus_keys = set()
     for line in body:
         if line.startswith("#") or not line.strip():
             continue
-        fields = line.strip().split(",")
+        fields = line.strip().split("\t")
         if len(fields) < 3:
             continue  # skip malformed lines
         rsid, chrom, pos = fields[0], fields[1], fields[2]

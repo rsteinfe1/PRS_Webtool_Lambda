@@ -172,14 +172,14 @@ def get_vcf_records(pos_list, fai, fapath):
     with open(fapath) as f:
         for (rsid, chrom, pos, genotype) in pos_list:
             start, _, linebases, linewidth = fai[chrom]
-            n_lines = int(pos / linebases)
-            n_bases = pos % linebases
+            n_lines = int(pos) / int(linebases)
+            n_bases = int(pos) % int(linebases)
             n_bytes = start + n_lines * linewidth + n_bases
             f.seek(n_bytes)
     # Stream the reference allele from the FASTA file
             ref = f.read(1)
             alts = get_alts(ref, genotype)
-            pos = str(pos + 1)
+            pos = str(int(pos) + 1)
             diploid = len(genotype) == 2
 #            assert ref not in alts # we always geturn a genotype
             assert len(alts) <= 2
