@@ -1,0 +1,12 @@
+cget
+pandas
+certifi
+pysam
+pybase64
+jsons
+boto3
+regex
+pip-system-certs
+statsmodels
+scipy
+CrossMap

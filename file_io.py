@@ -109,7 +109,7 @@ def load_ancestry_data(lines):
                     if x not in 'ACTG':
                         skip = True
                 if not skip:
-                    yield rsid, chrom, pos, genotype # positions are 1-based indices
+                    yield rsid, chrom, int(pos) - 1, genotype # positions are 1-based indices
 
 ## We take the loaded snplist from RAM (23andMe)
 def load_23andme_data(lines):
@@ -130,7 +130,7 @@ def load_23andme_data(lines):
                         if x not in 'ACTG':
                             skip = True
                     if not skip:
-                        yield rsid, chrom, pos, genotype # positions are 1-based indices
+                        yield rsid, chrom, int(pos) - 1, genotype
 
 def check_efs_file(file_path):
 
@@ -146,8 +146,8 @@ def check_efs_file(file_path):
     else:
         logger.error(f"[Error] {file_path} not found!")
         raise FileNotFoundError()
-        #return 'Error: File not found!'
 
+##TODO: Looks like sometimes the ref allele is a newline character messing up the file format!
 def get_vcf_records(pos_list, fai, fapath):
 
     #Function returns the alt allele aligned to +
@@ -177,7 +177,7 @@ def get_vcf_records(pos_list, fai, fapath):
             n_bytes = start + n_lines * linewidth + n_bases
             f.seek(n_bytes)
     # Stream the reference allele from the FASTA file
-            ref = f.read(1)
+            ref = f.read(1).strip()
             alts = get_alts(ref, genotype)
             pos = str(int(pos) + 1)
             diploid = len(genotype) == 2

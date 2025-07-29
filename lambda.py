@@ -168,11 +168,20 @@ def handler(event, context):
         records = file_io.get_vcf_records(snps, fai, fa36path)
         file_io.write_vcf(infile, records)
         impute.liftOver(chain1, infile, fapath)
+        
     elif build == 'GRCh37':
         logger.debug(f"[DEBUG]: Converting to VCF for build GRCh37.")
         fai = file_io.load_fai(faipath)
         records = file_io.get_vcf_records(snps, fai, fapath)
         file_io.write_vcf(infile, records)
+        # date_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+        # url = file_io.upload_file_to_s3(
+        #     bucket_name="prs-tool",
+        #     s3_key=f"prs_tool_debug/vcf/{date_prefix}_chr{chr}.vcf",
+        #     local_file_path=infile
+        # )
+        # logger.debug(f"[DEBUG]: Stored vcf as {url}")
     elif build == 'GRCh38':
         logger.debug(f"[DEBUG]: Converting to VCF for build GRCh38.")
         fai = file_io.load_fai(fai38path)
@@ -183,7 +192,7 @@ def handler(event, context):
         #We determine build by matching rsID to Locus, lift over (if necessary) and write.
         locusid = f"/mnt/ref/ref/dbSNP_151_idlocus_hg19_chr{chr}.txt"
         matchbuild37 = impute.match_locusids_from_body(body, locusid)
-        if matchbuild37 > 0.9:
+        if matchbuild37 > 0.45:
             build = 'GRCh37'
             logger.debug(f"[DEBUG]: Detected build GRCh37 with {matchbuild37} match ratio.")
             fai = file_io.load_fai(faipath)
@@ -192,7 +201,7 @@ def handler(event, context):
         else:
             locusid = f"/mnt/ref/ref/dbSNP_151_idlocus_hg18_chr{chr}.txt"
             matchbuild36 = impute.match_locusids_from_body(body, locusid)
-            if matchbuild36 > 0.9:
+            if matchbuild36 > 0.45:
                 logger.debug(f"[DEBUG]: Detected build GRCh36 with {matchbuild36} match ratio.")
                 fai = file_io.load_fai(fai36path)
                 records = file_io.get_vcf_records(snps, fai, fa36path)
@@ -201,7 +210,7 @@ def handler(event, context):
             else:
                 locusid = f"/mnt/ref/ref/dbSNP_151_idlocus_hg38_chr{chr}.txt"
                 matchbuild38 = impute.match_locusids_from_body(body, locusid)
-                if matchbuild38 > 0.9:
+                if matchbuild38 > 0.45:
                     logger.debug(f"[DEBUG]: Detected build GRCh38 with {matchbuild38} match ratio.")
                     fai = file_io.load_fai(fai38path)
                     records = file_io.get_vcf_records(snps, fai, fa38path)
@@ -216,20 +225,21 @@ def handler(event, context):
                         'body': json.dumps({'Error': 'Unknown genome build'})
                     }
 
+    infile = impute.normalize_vcf(infile, fapath, faipath)
     row_count_vcf = file_io.count_vcf(infile)
     logger.debug(f"[DEBUG]: File conversion complete. VCF has {row_count_vcf} rows")
-    file_io.upload_file_to_s3("prs-tool", "prs_tool_debug", infile)
-    impute.index_vcf(infile)
-    ##TODO: Add bcftool +fixref here to ensure correct reference alleles.
-    infile = '/tmp/input.vcf.gz'
+
+    infile = impute.index_vcf(infile)
     fileroot = '/mnt/ref/ref/'
-    #file_io.list_files_recursive(fileroot)
+
     # Step 4: Pre-phasing
     logger.debug(f"[DEBUG]: Start phasing")
+    logger.debug(f"[DEBUG]: Input VCF: {infile}")
+    #impute.print_vcf_preview(infile, n=10, show_header=True)
     impute.prePhase(infile, vcfRef, mapFile, chr)
 
-    infile = '/tmp/phased.vcf.gz'
-    impute.index_vcf(infile)
+    #infile = '/tmp/phased.vcf.gz'
+    infile = impute.index_vcf(infile)
 
     #Step 3: Impute
     logger.debug(f"[DEBUG]: Start imputing")
