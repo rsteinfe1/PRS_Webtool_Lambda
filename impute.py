@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import subprocess
 import os
 import logging
@@ -5,6 +6,8 @@ import sys
 import numpy as np
 import shutil
 import gzip
+import file_io
+import random
 
 logger = logging.getLogger("app_logger")
 
@@ -118,18 +121,18 @@ def index_vcf(vcf_path):
         
         return bgzipped_file
     except subprocess.CalledProcessError as e:
-        logger.error(f"[ERROR] Failed running: {e.cmd}")
+        logger.error(f"Failed running: {e.cmd}")
         logger.error(f"{e.stderr}")
         raise
     except Exception as e:
-        logger.error(f"[ERROR] An unexpected error occurred: {str(e)}")
+        logger.error(f"An unexpected error occurred: {str(e)}")
         raise
 
 def run_cmd(cmd, shell=False):
     print(f"Running: {cmd if isinstance(cmd, str) else ' '.join(cmd)}")
     result = subprocess.run(cmd, shell=shell, capture_output=True, text=True)
     if result.returncode != 0:
-        logger.error(f"[ERROR] Failed running: {result.stderr}")
+        logger.error(f"Failed running: {result.stderr}")
         sys.exit(1)
 
 def inject_contigs(vcf_file, fai_file):
@@ -147,9 +150,7 @@ def inject_contigs(vcf_file, fai_file):
             chrom, length = line.strip().split("\t")[:2]
             contig_lines.append(f"##contig=<ID={chrom},length={length}>\n")
 
-    contig_set = set(cl.strip() for cl in contig_lines)
     gt_format_line = '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n'
-
     header = []
     body = []
     existing_contigs = set()
@@ -190,19 +191,17 @@ def liftOver(chain, input_vcf, ref_fasta):
 
     # Temporary working files in /tmp
     lifted_raw = f"/tmp/{prefix}.lifted.unsorted.vcf"
-    sorted_tmp = f"/tmp/{prefix}.sorted.tmp.vcf"
     
     # Step 1: CrossMap
     run_cmd(["CrossMap", "vcf", chain, input_vcf, ref_fasta, lifted_raw])
 
     # Step 2: Inject correct contig headers from .fai
-    inject_contigs(lifted_raw, ref_fasta + ".fai")
-
+    #inject_contigs(lifted_raw, ref_fasta + ".fai")
+    
     # Step 3: Sort with bcftools
-    run_cmd(f"/usr/local/bcftools-1.22/bcftools sort {lifted_raw} -Ov -o {sorted_tmp}", shell=True)
-
+    #run_cmd(f"/usr/local/bcftools-1.22/bcftools sort {lifted_raw} -Ov -o {sorted_tmp}", shell=True)
     # Step 4: Rename to final path in /tmp/ before compression
-    shutil.move(sorted_tmp, input_vcf)
+    return lifted_raw
 
 def match_locusids_from_body(body, locusid_file):
 
@@ -280,9 +279,9 @@ def normalize_vcf(vcf_file, fa_file, fai_file):
         inject_contigs(vcf_file, fai_file)
         # Match alleles and sort the VCF file using bcftools
         norm_vcf = '/tmp/normalized.sorted.vcf.gz'
-        run_cmd(f"/usr/local/bcftools-1.22/bcftools -m -both --threads 4 -f {fa_file} -cs -Ov {vcf_file} | \
-                /usr/local/bcftools-1.22/bcftools +fixref {vcf_file} --threads 4 -Ov -- -f {fa_file} -m swap | \
-                /usr/local/bcftools-1.22/bcftools sort -Oz -o {norm_vcf}", shell=True)
+        run_cmd(f"/usr/local/bcftools-1.22/bcftools sort {vcf_file} | \
+                /usr/local/bcftools-1.22/bcftools norm -m -both -f {fa_file} -cs | \
+                /usr/local/bcftools-1.22/bcftools +fixref -Oz -o {norm_vcf} -- -f {fa_file} -m swap", shell=True)
 
         # Index the sorted VCF
         index_vcf(norm_vcf)

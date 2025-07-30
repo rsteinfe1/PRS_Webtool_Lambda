@@ -116,7 +116,8 @@ def load_23andme_data(lines):
         for row_num, line in enumerate(lines, start=1):
             if line.startswith('#'): continue
             if line.strip():
-                fields = [f.strip() for f in line.strip().split('\t') if f.strip() != '']
+                fields = [f.strip() for f in line.strip().split('\t')]
+                #fields = [f.strip() for f in line.strip().split('\t') if f.strip() != '']
                 if len(fields) == 4:
                     rsid, chrom, pos, genotype = fields
                 else:
@@ -172,12 +173,15 @@ def get_vcf_records(pos_list, fai, fapath):
     with open(fapath) as f:
         for (rsid, chrom, pos, genotype) in pos_list:
             start, _, linebases, linewidth = fai[chrom]
-            n_lines = int(pos) / int(linebases)
+            n_lines = int(pos) // int(linebases)
             n_bases = int(pos) % int(linebases)
             n_bytes = start + n_lines * linewidth + n_bases
             f.seek(n_bytes)
     # Stream the reference allele from the FASTA file
-            ref = f.read(1).strip()
+            ref = f.read(1).strip().upper()
+            if not ref or len(ref) != 1 or ref not in 'ACGT':
+                logger.error(f"Invalid reference allele '{ref}' at position {pos} for rsid {rsid} in chromosome {chrom}, genotype was {genotype}.")
+                continue
             alts = get_alts(ref, genotype)
             pos = str(int(pos) + 1)
             diploid = len(genotype) == 2
