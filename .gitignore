@@ -1,4 +1,5 @@
 #Files to not push to git.
+.gitignore
 genome_Christopher_Smith_v5_chr1_20230926164611.txt
 *.R
 test.py

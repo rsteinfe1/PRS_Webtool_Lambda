@@ -93,8 +93,10 @@ def write_vcf(outfile, records):
 def load_ancestry_data(lines):
     for row_num, line in enumerate(lines, start=1):
         if line.startswith('#'): continue
+        if line.startswith('rsid'): continue  # Skip header line
         if line.strip():
-            fields = [f.strip() for f in line.strip().split('\t') if f.strip() != '']
+            #fields = [f.strip() for f in line.strip().split('\t') if f.strip() != '']
+            [f.strip() for f in line.strip().split('\t')]
             if len(fields) == 5:
                 rsid, chrom, pos, allele1, allele2 = fields
             else:
@@ -115,13 +117,15 @@ def load_ancestry_data(lines):
 def load_23andme_data(lines):
         for row_num, line in enumerate(lines, start=1):
             if line.startswith('#'): continue
+            if line.startswith('rsid'): continue
+
             if line.strip():
                 fields = [f.strip() for f in line.strip().split('\t')]
                 #fields = [f.strip() for f in line.strip().split('\t') if f.strip() != '']
                 if len(fields) == 4:
                     rsid, chrom, pos, genotype = fields
                 else:
-                    logger.warning(f"Skipping malformed line {row_num}: {line.strip()} (parsed fields: {fields})")
+                    logger.warning(f"Skipping malformed line {row_num}: {line.strip()} (parsed fields: {fields}, len = {len(fields)})")
                     continue
                 if chrom == 'MT':
                     chrom = 'M'
@@ -148,7 +152,6 @@ def check_efs_file(file_path):
         logger.error(f"[Error] {file_path} not found!")
         raise FileNotFoundError()
 
-##TODO: Looks like sometimes the ref allele is a newline character messing up the file format!
 def get_vcf_records(pos_list, fai, fapath):
 
     #Function returns the alt allele aligned to +

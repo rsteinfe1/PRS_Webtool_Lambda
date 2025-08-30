@@ -174,6 +174,7 @@ def handler(event, context):
         fai = file_io.load_fai(faipath)
         records = file_io.get_vcf_records(snps, fai, fapath)
         file_io.write_vcf(infile, records)
+
     elif build == 'GRCh38':
         logger.debug(f"[DEBUG]: Converting to VCF for build GRCh38.")
         fai = file_io.load_fai(fai38path)
@@ -198,13 +199,6 @@ def handler(event, context):
                 fai = file_io.load_fai(fai36path)
                 records = file_io.get_vcf_records(snps, fai, fa36path)
                 file_io.write_vcf(infile, records)
-                # date_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                # url = file_io.upload_file_to_s3(
-                #     bucket_name="prs-tool",
-                #     s3_key=f"prs_tool_debug/vcf/{date_prefix}_chr{chr}.vcf",
-                #     local_file_path=infile
-                # )
-                # logger.debug(f"[DEBUG]: Stored vcf as {url}")
                 infile = impute.liftOver(chain1, infile, fapath)
             else:
                 locusid = f"/mnt/ref/ref/dbSNP_151_idlocus_hg38_chr{chr}.txt"
@@ -227,7 +221,14 @@ def handler(event, context):
     infile = impute.normalize_vcf(infile, fapath, faipath)
     row_count_vcf = file_io.count_vcf(infile)
     logger.debug(f"[DEBUG]: File conversion complete. VCF has {row_count_vcf} rows")
-
+    
+    date_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    url = file_io.upload_file_to_s3(
+        bucket_name="prs-tool",
+        s3_key=f"prs_tool_debug/vcf/{date_prefix}_fixed_chr{chr}.vcf",
+        local_file_path=infile
+    )
+    logger.debug(f"[DEBUG]: Stored fixed vcf as {url}")
     fileroot = '/mnt/ref/ref/'
     # Step 4: Pre-phasing
     logger.debug(f"[DEBUG]: Start phasing")
@@ -235,8 +236,16 @@ def handler(event, context):
     #impute.print_vcf_preview(infile, n=10, show_header=True)
     impute.prePhase(infile, vcfRef, mapFile, chr)
 
-    #infile = '/tmp/phased.vcf.gz'
+    infile = '/tmp/phased.vcf.gz'
     infile = impute.index_vcf(infile)
+    
+    date_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    url = file_io.upload_file_to_s3(
+        bucket_name="prs-tool",
+        s3_key=f"prs_tool_debug/vcf/{date_prefix}_phased_chr{chr}.vcf",
+        local_file_path=infile
+    )
+    logger.debug(f"[DEBUG]: Stored phased vcf as {url}")
 
     #Step 3: Impute
     logger.debug(f"[DEBUG]: Start imputing")
@@ -248,13 +257,7 @@ def handler(event, context):
     #logger.debug(f"[DEBUG]: Imputing complete. Imputed VCF has {row_count_imputed_vcf} variants")
     prs_chr = prs.calc(infile, fileroot, chr)
     logger.debug(f"[DEBUG]: Calculated PRS for chr{chr}: {prs_chr}")
-    #date_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    #url = file_io.upload_file_to_s3(
-    #    bucket_name="prs-tool",
-    #    s3_key=f"prs_tool_debug/vcf/{date_prefix}_chr{chr}.vcf",
-    #    local_file_path="/tmp/imputed.vcf.gz"
-    #)
-    #logger.debug(f"[DEBUG]: Stored imputed vcf as {url}")
+
     logger.debug(f"[DEBUG]: Cleaning up...")
     clean_up('/tmp/')
     logger.debug(f"[DEBUG]:All complete. Returning {list(prs_chr.keys())}")
